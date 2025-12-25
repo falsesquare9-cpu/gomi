@@ -522,6 +522,21 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
         cursor: pointer;
       }
 
+      .setup-fab {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 60;
+        padding: 10px 18px;
+        border-radius: 999px;
+        border: 1px solid rgba(31, 28, 107, 0.2);
+        background: rgba(255, 255, 255, 0.95);
+        color: var(--text-primary);
+        font-weight: 600;
+        box-shadow: var(--shadow-soft);
+        cursor: pointer;
+      }
+
       .setup-muted {
         font-size: 12px;
         color: var(--text-muted);
@@ -1057,7 +1072,9 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
         const isDismissed = () => localStorage.getItem("gomi-setup-dismissed") === "1";
 
         const isOnboardingStepVisible = () => {
-          return document.body?.innerText?.includes("お住まいの自治体");
+          if (document.querySelector('input[placeholder*="自治体"]')) return true;
+          if (document.querySelector('[aria-label*="自治体"]')) return true;
+          return false;
         };
 
         const showOverlay = (selectedName = "") => {
@@ -1095,9 +1112,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
             if (btn.dataset.setupBound) return;
             btn.dataset.setupBound = "1";
             btn.addEventListener("click", () => {
-              if (isOnboardingStepVisible()) {
-                showOverlay(getMunicipalityName());
-              }
+              showOverlay(getMunicipalityName());
             });
           });
 
@@ -1147,10 +1162,8 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
           showOverlay(municipality);
         });
 
-        if (!hasPdf() && !isDismissed()) {
-          if (isOnboardingStepVisible()) {
-            showOverlay(getMunicipalityName());
-          }
+        if (!hasPdf() && isOnboardingStepVisible()) {
+          showOverlay(getMunicipalityName());
         }
 
         const observer = new MutationObserver(() => {
@@ -1161,9 +1174,21 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
+        const ensureFab = () => {
+          if (hasPdf()) return;
+          if (document.querySelector(".setup-fab")) return;
+          const fab = document.createElement("button");
+          fab.className = "setup-fab";
+          fab.type = "button";
+          fab.textContent = "セットアップを開く";
+          fab.addEventListener("click", () => showOverlay(getMunicipalityName()));
+          document.body.appendChild(fab);
+        };
+
         wireOnboardingTriggers();
         startMunicipalityWatcher();
         maybeCheckForUpdates();
+        ensureFab();
       });
     </script>
   </body>
