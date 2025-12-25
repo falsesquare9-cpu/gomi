@@ -45,6 +45,7 @@ export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, HEAD");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     res.status(upstream.status);
 
     const passthroughHeaders = [
@@ -58,6 +59,12 @@ export default async function handler(req, res) {
       const value = upstream.headers.get(header);
       if (value) res.setHeader(header, value);
     });
+
+    if (!res.getHeader("content-type")) {
+      if (parsed.pathname.endsWith(".js") || parsed.pathname.endsWith(".mjs")) {
+        res.setHeader("content-type", "application/javascript; charset=utf-8");
+      }
+    }
 
     if (method === "HEAD") {
       res.end();
