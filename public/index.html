@@ -1079,6 +1079,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
 
         const showOverlay = (selectedName = "") => {
           if (hasPdf()) return;
+          if (!overlay.classList.contains("hidden")) return;
           setInitialMunicipality();
           overlay.classList.remove("hidden");
           if (selectedName) {
@@ -1152,9 +1153,10 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
 
         document.addEventListener("click", (event) => {
           if (!isOnboardingStepVisible() || hasPdf()) return;
-          const target = event.target.closest("button, [role='button'], li, div");
+          const target = event.target.closest("button, [role='button'], li");
           if (!target) return;
-          const text = target.innerText?.trim();
+          const text = target.innerText?.trim() || "";
+          if (text.length === 0 || text.length > 40) return;
           const municipality = extractMunicipalityFromText(text);
           if (!municipality) return;
           setMunicipalityName(municipality);
