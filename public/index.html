@@ -728,30 +728,45 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
         };
 
         const fetchCkanCandidates = async (endpoint, query) => {
-          const url = `${endpoint}?rows=20&q=${encodeURIComponent(query)}`;
-          const res = await proxyFetch(url);
-          if (!res.ok) throw new Error("CKAN検索に失敗しました。");
-          const data = await res.json();
-          if (!data.success || !data.result?.results?.length) return [];
-          return data.result.results;
+          try {
+            const url = `${endpoint}?rows=20&q=${encodeURIComponent(query)}`;
+            const res = await proxyFetch(url);
+            if (!res.ok) return [];
+            const text = await res.text();
+            const data = JSON.parse(text);
+            if (!data.success || !data.result?.results?.length) return [];
+            return data.result.results;
+          } catch {
+            return [];
+          }
         };
 
         const fetchCkanPackageShow = async (endpoint, packageId) => {
-          const url = `${endpoint}?id=${encodeURIComponent(packageId)}`;
-          const res = await proxyFetch(url);
-          if (!res.ok) throw new Error("CKAN詳細取得に失敗しました。");
-          const data = await res.json();
-          if (!data.success || !data.result) return null;
-          return data.result;
+          try {
+            const url = `${endpoint}?id=${encodeURIComponent(packageId)}`;
+            const res = await proxyFetch(url);
+            if (!res.ok) return null;
+            const text = await res.text();
+            const data = JSON.parse(text);
+            if (!data.success || !data.result) return null;
+            return data.result;
+          } catch {
+            return null;
+          }
         };
 
         const fetchCkanResourceSearch = async (endpoint, query) => {
-          const url = `${endpoint}?rows=20&query=${encodeURIComponent(query)}`;
-          const res = await proxyFetch(url);
-          if (!res.ok) throw new Error("CKANリソース検索に失敗しました。");
-          const data = await res.json();
-          if (!data.success || !data.result?.results?.length) return [];
-          return data.result.results;
+          try {
+            const url = `${endpoint}?rows=20&query=${encodeURIComponent(query)}`;
+            const res = await proxyFetch(url);
+            if (!res.ok) return [];
+            const text = await res.text();
+            const data = JSON.parse(text);
+            if (!data.success || !data.result?.results?.length) return [];
+            return data.result.results;
+          } catch {
+            return [];
+          }
         };
 
         const pickResourceFromResults = (resources) => {
@@ -932,6 +947,10 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
             setStatus("データをダウンロードしています…", "progress");
             const res = await proxyFetch(source.url);
             if (!res.ok) throw new Error("ダウンロードに失敗しました。");
+            const contentType = res.headers.get("content-type") || "";
+            if (contentType.includes("text/html")) {
+              throw new Error("取得先がHTMLでした。公式ページ直リンクが必要です。");
+            }
 
             const contentLength = res.headers.get("content-length");
             if (contentLength) {
