@@ -522,21 +522,6 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
         cursor: pointer;
       }
 
-      .setup-fab {
-        position: fixed;
-        right: 18px;
-        bottom: 18px;
-        z-index: 60;
-        padding: 10px 18px;
-        border-radius: 999px;
-        border: 1px solid rgba(31, 28, 107, 0.2);
-        background: rgba(255, 255, 255, 0.95);
-        color: var(--text-primary);
-        font-weight: 600;
-        box-shadow: var(--shadow-soft);
-        cursor: pointer;
-      }
-
       .setup-muted {
         font-size: 12px;
         color: var(--text-muted);
@@ -628,6 +613,9 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
         const CKAN_SHOW_ENDPOINT = "https://search.ckan.jp/api/3/action/package_show";
         const CKAN_ALT_SEARCH = "https://search.ckan.jp/ckan/api/3/action/package_search";
         const CKAN_ALT_SHOW = "https://search.ckan.jp/ckan/api/3/action/package_show";
+        const CKAN_RESOURCE_SEARCH = "https://search.ckan.jp/api/3/action/resource_search";
+        const CKAN_ALT_RESOURCE_SEARCH = "https://search.ckan.jp/ckan/api/3/action/resource_search";
+        const CKAN_FALLBACK_RESOURCE_SEARCH = "https://www.data.go.jp/data/api/3/action/resource_search";
         const CKAN_FALLBACK_SEARCH = "https://www.data.go.jp/data/api/3/action/package_search";
         const CKAN_FALLBACK_SHOW = "https://www.data.go.jp/data/api/3/action/package_show";
         const PROXY_ENDPOINT = location.protocol === "file:" ? "" : `${location.origin}/api/fetch`;
@@ -757,6 +745,25 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
           return data.result;
         };
 
+        const fetchCkanResourceSearch = async (endpoint, query) => {
+          const url = `${endpoint}?rows=20&query=${encodeURIComponent(query)}`;
+          const res = await proxyFetch(url);
+          if (!res.ok) throw new Error("CKANリソース検索に失敗しました。");
+          const data = await res.json();
+          if (!data.success || !data.result?.results?.length) return [];
+          return data.result.results;
+        };
+
+        const pickResourceFromResults = (resources) => {
+          const csv = resources.find((r) => (r.format || "").toLowerCase() === "csv");
+          const json = resources.find((r) => (r.format || "").toLowerCase() === "json");
+          const pdf = resources.find((r) => (r.format || "").toLowerCase() === "pdf");
+          if (csv) return { resource: csv, type: "csv" };
+          if (json) return { resource: json, type: "json" };
+          if (pdf) return { resource: pdf, type: "pdf" };
+          return null;
+        };
+
         const pickResource = (datasets) => {
           for (const dataset of datasets) {
             const resources = dataset.resources || [];
@@ -827,6 +834,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
               { search: CKAN_FALLBACK_SEARCH, show: CKAN_FALLBACK_SHOW },
             ];
             let picked = null;
+            let pickedSource = null;
             for (const endpoint of endpoints) {
               for (const query of queries) {
                 const datasets = await fetchCkanCandidates(endpoint.search, query);
@@ -838,9 +846,52 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
                   if (detail) detailed.push(detail);
                 }
                 picked = pickResource(detailed.length ? detailed : datasets);
-                if (picked) break;
+                if (picked) {
+                  pickedSource = { dataset: picked.dataset, resource: picked.resource };
+                  break;
+                }
               }
               if (picked) break;
+            }
+
+            if (!picked) {
+              const resourceQueries = [
+                `${municipality} ごみ`,
+                `${municipality} ゴミ`,
+                `${municipality} 分別`,
+                `${municipality} 廃棄物`,
+              ];
+              const resourceEndpoints = [
+                CKAN_RESOURCE_SEARCH,
+                CKAN_ALT_RESOURCE_SEARCH,
+                CKAN_FALLBACK_RESOURCE_SEARCH,
+              ];
+              for (const endpoint of resourceEndpoints) {
+                for (const query of resourceQueries) {
+                  const results = await fetchCkanResourceSearch(endpoint, query);
+                  if (!results.length) continue;
+                  const pickedResource = pickResourceFromResults(results);
+                  if (!pickedResource) continue;
+                  let dataset = null;
+                  const packageId = pickedResource.resource.package_id;
+                  if (packageId) {
+                    const showEndpoint = endpoint.includes("data.go.jp")
+                      ? CKAN_FALLBACK_SHOW
+                      : endpoint.includes("/ckan/")
+                        ? CKAN_ALT_SHOW
+                        : CKAN_SHOW_ENDPOINT;
+                    dataset = await fetchCkanPackageShow(showEndpoint, packageId);
+                  }
+                  picked = {
+                    dataset: dataset || { title: pickedResource.resource.name },
+                    resource: pickedResource.resource,
+                    type: pickedResource.type,
+                  };
+                  pickedSource = { dataset, resource: pickedResource.resource };
+                  break;
+                }
+                if (picked) break;
+              }
             }
             if (!picked) {
               setStatus("オープンデータが見つかりません。公式ページで探します。", "progress");
@@ -848,8 +899,8 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
               updateSize("不明");
               return null;
             }
-            const updatedAt = picked.dataset.metadata_modified || "";
-            const sourceLabel = picked.dataset.title || municipality;
+            const updatedAt = picked.dataset?.metadata_modified || "";
+            const sourceLabel = picked.dataset?.title || municipality;
             updateSource(`${sourceLabel}（${picked.type.toUpperCase()}）`);
             return {
               municipality,
@@ -1176,21 +1227,9 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
-        const ensureFab = () => {
-          if (hasPdf()) return;
-          if (document.querySelector(".setup-fab")) return;
-          const fab = document.createElement("button");
-          fab.className = "setup-fab";
-          fab.type = "button";
-          fab.textContent = "セットアップを開く";
-          fab.addEventListener("click", () => showOverlay(getMunicipalityName()));
-          document.body.appendChild(fab);
-        };
-
         wireOnboardingTriggers();
         startMunicipalityWatcher();
         maybeCheckForUpdates();
-        ensureFab();
       });
     </script>
   </body>
