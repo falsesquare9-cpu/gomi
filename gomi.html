@@ -613,6 +613,16 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
         const CKAN_SHOW_ENDPOINT = "https://search.ckan.jp/api/3/action/package_show";
         const CKAN_FALLBACK_SEARCH = "https://www.data.go.jp/data/api/3/action/package_search";
         const CKAN_FALLBACK_SHOW = "https://www.data.go.jp/data/api/3/action/package_show";
+        const PROXY_ENDPOINT = location.protocol === "file:" ? "" : `${location.origin}/api/fetch`;
+
+        const proxyFetch = async (url, options = {}) => {
+          if (!PROXY_ENDPOINT) {
+            throw new Error("プロキシが未設定です。Vercelにデプロイしてください。");
+          }
+          const method = (options.method || "GET").toUpperCase();
+          const proxyUrl = `${PROXY_ENDPOINT}?url=${encodeURIComponent(url)}&method=${method}`;
+          return fetch(proxyUrl);
+        };
 
         const setStatus = (message, state = "idle") => {
           if (!statusEl) return;
@@ -684,7 +694,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
 
         const reverseGeocode = async (lat, lon) => {
           const url = `https://nominatim.openstreetmap.org/reverse?format=json&accept-language=ja&lat=${lat}&lon=${lon}`;
-          const res = await fetch(url);
+          const res = await proxyFetch(url);
           if (!res.ok) throw new Error("位置情報の逆引きに失敗しました。");
           const data = await res.json();
           const address = data.address || {};
@@ -694,7 +704,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
         const lookupPostalCode = async (postalCode) => {
           const zip = postalCode.replace(/[^0-9]/g, "");
           if (zip.length !== 7) throw new Error("郵便番号を7桁で入力してください。");
-          const res = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${zip}`);
+          const res = await proxyFetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${zip}`);
           if (!res.ok) throw new Error("郵便番号検索に失敗しました。");
           const data = await res.json();
           if (data.status !== 200 || !data.results?.length) {
@@ -714,7 +724,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
 
         const fetchCkanCandidates = async (endpoint, query) => {
           const url = `${endpoint}?rows=20&q=${encodeURIComponent(query)}`;
-          const res = await fetch(url);
+          const res = await proxyFetch(url);
           if (!res.ok) throw new Error("CKAN検索に失敗しました。");
           const data = await res.json();
           if (!data.success || !data.result?.results?.length) return [];
@@ -723,7 +733,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
 
         const fetchCkanPackageShow = async (endpoint, packageId) => {
           const url = `${endpoint}?id=${encodeURIComponent(packageId)}`;
-          const res = await fetch(url);
+          const res = await proxyFetch(url);
           if (!res.ok) throw new Error("CKAN詳細取得に失敗しました。");
           const data = await res.json();
           if (!data.success || !data.result) return null;
@@ -851,7 +861,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
 
           try {
             setStatus("データをダウンロードしています…", "progress");
-            const res = await fetch(source.url);
+            const res = await proxyFetch(source.url);
             if (!res.ok) throw new Error("ダウンロードに失敗しました。");
 
             const contentLength = res.headers.get("content-length");
@@ -946,7 +956,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${t.do
           try {
             const meta = JSON.parse(metaRaw);
             if (!meta.url || meta.url === "manual-import") return;
-            const res = await fetch(meta.url, { method: "HEAD" });
+            const res = await proxyFetch(meta.url, { method: "HEAD" });
             if (!res.ok) return;
             const lastModified = res.headers.get("last-modified") || "";
             if (lastModified && meta.updatedAt && lastModified !== meta.updatedAt) {
